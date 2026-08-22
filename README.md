@@ -44,7 +44,7 @@ Example output:
 - Add a proper `origin`/department metadata field if the source system of each document needs to be tracked beyond `category`/`source_type`.
 
 ## Structure
-
+```
 docs/ source documents (.txt), one per file, each with a metadata header
 src/
   config.py shared setup: embedding model, Gemini client
@@ -55,7 +55,7 @@ src/
   generation.py prompt construction, LLM call, JSON parsing
   main.py wires everything together, runs the demo queries
   build.py concatenates src/ modules into a single rag_system.py deliverable
-
+```
 
 ## Running
 
