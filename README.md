@@ -65,7 +65,7 @@ src/
 
 To generate the single-file deliverable:
 
-python build.py
+`python build.py`
 
 This produces `rag_system.py` by concatenating all `src/` modules in dependency order and stripping internal cross-module imports.
 
