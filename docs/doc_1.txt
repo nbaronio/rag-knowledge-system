@@ -1,0 +1,7 @@
+id: doc_1
+title: Data Access Policy v1
+category: compliance
+source_type: policy
+date: 2022-01-10
+---
+Employees requesting access to customer data must submit a written request to their direct manager. The manager reviews the request and forwards it to the IT Security team, who evaluates it within 10 business days. Approved requests grant access for a fixed period of 90 days, after which access is automatically revoked and must be requested again. Access logs are reviewed quarterly by the Compliance team. Employees are required to complete a general data protection training session once per year. Any suspected misuse of customer data must be reported to the direct manager, who will escalate to Compliance if necessary. This policy applies to all departments handling customer records, including Sales, Support, and Product.
