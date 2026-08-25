@@ -55,4 +55,33 @@ def load_documents(folder_path="docs"):
 
     return [parse_document_file(f) for f in files]
 
-documents = load_documents("docs")
+if __name__ == "__main__":
+    import tempfile
+
+    def _parse_text(text):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "test.txt"
+            file_path.write_text(text, encoding="utf-8")
+            return parse_document_file(file_path)
+
+    # Well-formed document parses correctly
+    doc = _parse_text(
+        "id: t1\ntitle: Test\ncategory: cat\nsource_type: policy\ndate: 2024-01-01\n---\nSome content."
+    )
+    assert doc.id == "t1" and doc.content == "Some content."
+
+    # Missing '---' separator
+    try:
+        _parse_text("id: t1\ntitle: Test\ncategory: cat\nsource_type: policy\ndate: 2024-01-01")
+        assert False, "expected ValueError for missing separator"
+    except ValueError:
+        pass
+
+    # Missing required metadata field (source_type)
+    try:
+        _parse_text("id: t1\ntitle: Test\ncategory: cat\ndate: 2024-01-01\n---\nSome content.")
+        assert False, "expected ValueError for missing required field"
+    except ValueError:
+        pass
+
+    print("ingestion.py: all assertions passed")

@@ -12,7 +12,8 @@ You are provided with a set of documents that represent your entire knowledge ba
 If the question is not relevant to the content of the documents, you must state this explicitly, for example with the phrase "I don't have information on the requested topic."
 Always cite the source you are using to answer, using the document id as the identifier.
 The output must be in JSON format, following the exact schema provided below. You must not change field names or take any liberties in interpreting this template.
-JSON structure: {"answer", "sources_used", "confidence", "reasoning_confidence"}
+JSON structure: {"answer", "key_points", "sources_used", "confidence", "reasoning_confidence"}
+The "key_points" field is a list of short strings summarizing the main takeaways of the answer.
 The "sources_used" field is composed of the following fields: "sources_used": [{"id": "...", "title": "...", "date": "..."}]
 You will receive a retrieval score based on how well the answer matches the requested information. If you believe it is necessary, you may lower this score, but you must NEVER raise it.
 Do not wrap the JSON in markdown code blocks or backticks. Return raw JSON only.
@@ -20,15 +21,16 @@ Do not wrap the JSON in markdown code blocks or backticks. Return raw JSON only.
 
 def build_context(top_results):
     formatted_lines = ""
-    for chunk, score in top_results:
-        formatted_line = f"[Source: {chunk.parent_doc_id} | {chunk.title} | {chunk.date}]\n{chunk.text}\n\n"
-        formatted_lines += formatted_line
+    for chunk, semantic_score, final_score in top_results:
+        formatted_lines += f"[Source: {chunk.parent_doc_id} | {chunk.title} | {chunk.date}]\n{chunk.text}\n\n"
     return formatted_lines
 
 def build_prompt(query, top_results):
     context = build_context(top_results)
+    # Confidence is based on semantic relevance alone: the recency bonus
+    # should not make an answer look more trustworthy than the content justifies.
     confidence = score_to_confidence(top_results[0][1])
-    prompt = f"""
+    return f"""
     SYSTEM INSTRUCTIONS:
     {SYSTEM_INSTRUCTIONS}
 
@@ -41,7 +43,6 @@ def build_prompt(query, top_results):
     RETRIEVAL CONFIDENCE:
     {confidence}
     """
-    return prompt
 
 def clean_json_text(raw_text):
     text = raw_text.strip()
@@ -53,17 +54,15 @@ def clean_json_text(raw_text):
 def generate_answer(query, top_results):
     prompt = build_prompt(query, top_results)
 
-    response = client.models.generate_content(
-        model=GENERATION_MODEL_NAME,
-        contents=prompt
-    )
-
-    raw_text = response.text
+    try:
+        response = client.models.generate_content(model=GENERATION_MODEL_NAME, contents=prompt)
+    except Exception as e:
+        # A timeout, rate limit, or 500 error should not crash the whole script
+        return {"error": "Generation call failed", "detail": str(e)}
 
     try:
-        cleaned = clean_json_text(raw_text)
-        parsed = json.loads(cleaned)
+        parsed = json.loads(clean_json_text(response.text))
     except json.JSONDecodeError:
-        parsed = {"error": "JSON parsing failed", "raw_output": raw_text}
+        parsed = {"error": "JSON parsing failed", "raw_output": response.text}
 
     return parsed

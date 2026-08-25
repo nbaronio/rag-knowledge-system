@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .venv/
 main_it.py
+rag_datapulse.ipynb

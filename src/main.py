@@ -5,7 +5,7 @@ generation together, then runs the demo queries.
 
 from ingestion import load_documents
 from indexing import build_all_chunks, build_embeddings_matrix
-from retrieval import precompute_date_bounds, retrieve, MIN_SCORE_THRESHOLD
+from retrieval import precompute_recency_scores, retrieve, MIN_SCORE_THRESHOLD
 from generation import generate_answer
 
 documents = load_documents("docs")
@@ -13,16 +13,21 @@ assert len(documents) == 6, f"Expected 6 documents, found {len(documents)}"
 
 all_chunks = build_all_chunks(documents)
 embeddings_matrix = build_embeddings_matrix(all_chunks)
-min_date, max_date = precompute_date_bounds(all_chunks)
+recency_scores = precompute_recency_scores(all_chunks)
 
-def answer_query(query, top_k=3, alpha=0.75, min_score_threshold=MIN_SCORE_THRESHOLD):
-    results = retrieve(query, all_chunks, embeddings_matrix, min_date, max_date, top_k, alpha)
+def answer_query(query, top_k=3, alpha=0.9, min_score_threshold=MIN_SCORE_THRESHOLD):
+    results = retrieve(query, all_chunks, embeddings_matrix, recency_scores, top_k, alpha)
 
-    if results[0][1] > min_score_threshold:
-        return generate_answer(query, results)
+    # Filter on semantic relevance alone: weak chunks shouldn't enter the
+    # context just because a recency bonus dragged their final score up.
+    relevant_results = [r for r in results if r[1] > min_score_threshold]
+
+    if relevant_results:
+        return generate_answer(query, relevant_results)
 
     return {
         "answer": "No relevant sources found for this query",
+        "key_points": [],
         "sources_used": [],
         "confidence": "low",
         "reasoning_confidence": "Retrieval score below threshold"

@@ -2,36 +2,48 @@
 Hybrid retrieval: combines semantic similarity with a recency signal.
 """
 
-from datetime import date
+import datetime
 from config import model
 
-def precompute_date_bounds(all_chunks):
-    dates = [date.fromisoformat(chunk.date) for chunk in all_chunks]
-    return min(dates), max(dates)
+def precompute_recency_scores(all_chunks):
+    # Parsed once here and reused below, instead of re-parsing the same
+    # ISO string a second time per chunk.
+    dates = [datetime.date.fromisoformat(chunk.date) for chunk in all_chunks]
+    min_date, max_date = min(dates), max(dates)
+    span_days = (max_date - min_date).days
 
-def retrieve(query, all_chunks, embeddings_matrix, min_date, max_date, top_k=3, alpha=0.75):
+    recency_scores = []
+    for chunk_date in dates:
+        if span_days == 0:
+            # All documents share the same date: recency carries no signal,
+            # avoid division by zero, use a neutral score.
+            recency_scores.append(0.5)
+        else:
+            recency_scores.append((chunk_date - min_date).days / span_days)
+    return recency_scores
+
+def retrieve(query, all_chunks, embeddings_matrix, recency_scores, top_k=3, alpha=0.9):
     query_vector = model.encode(query, normalize_embeddings=True)
     semantic_scores = embeddings_matrix @ query_vector
 
-    normalized_recency_list = []
-    for chunk in all_chunks:
-        real_date = date.fromisoformat(chunk.date)
-        normalized_recency = (real_date - min_date) / (max_date - min_date)
-        normalized_recency_list.append(normalized_recency)
-
-    final_scores = []
+    results = []
     for i in range(len(all_chunks)):
-        final_score = alpha * semantic_scores[i] + (1 - alpha) * normalized_recency_list[i]
-        final_scores.append((all_chunks[i], final_score))
+        semantic_score = float(semantic_scores[i])
+        final_score = alpha * semantic_score + (1 - alpha) * recency_scores[i]
+        # semantic_score and final_score are kept separate: the former drives
+        # threshold and confidence, the latter only the final ranking.
+        results.append((all_chunks[i], semantic_score, final_score))
 
-    final_scores_sorted = sorted(final_scores, key=lambda p: p[1], reverse=True)
-    return final_scores_sorted[:top_k]
+    return sorted(results, key=lambda r: r[2], reverse=True)[:top_k]
 
-# --- Empirical calibration of min_score_threshold (performed once during development) ---
-# retrieve("What's the weather today?")[0][1]                    # 0.2652609
-# retrieve("Best pizza recipe")[0][1]                             # 0.2434846
-# retrieve("data access procedure for customer data")[0][1]       # 0.66481614
+# --- Empirical calibration of MIN_SCORE_THRESHOLD (performed once during development) ---
+# Applied to semantic_score alone, not final_score: final_score is blended
+# with the recency bonus and would inflate weak matches (see main.py).
+# retrieve("What is today's weather?")[0][1]                -> semantic_score ~0.02  (out-of-domain)
+# retrieve("Best pizza recipe")[0][1]                        -> semantic_score ~0.01  (out-of-domain)
+# retrieve("...operative incident...")[0][1]                 -> semantic_score ~0.44  (weakest genuine on-domain top match)
 #
-# There is a substantial gap between out-of-domain and on-domain scores.
-# Based on these empirically observed values, min_score_threshold is set to 0.4.
-MIN_SCORE_THRESHOLD = 0.4
+# There is a wide gap between out-of-domain noise (~0.02) and the weakest
+# genuine on-domain top match (~0.44). MIN_SCORE_THRESHOLD is set to 0.15:
+# well above the noise floor, well below genuine matches.
+MIN_SCORE_THRESHOLD = 0.15
